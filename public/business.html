@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Storefront — AgentFoundry</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="page-wrapper">
+    <header class="site-header">
+      <a href="/" class="logo">⬡ AgentFoundry</a>
+      <div class="badge">Live Store</div>
+    </header>
+
+    <main id="storefront">
+      <div class="loading-center">
+        <div class="spinner"></div>
+        <p>Loading storefront...</p>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const businessId = window.location.pathname.split('/').pop();
+    let business = null;
+
+    async function loadBusiness() {
+      try {
+        const res = await fetch(`/api/business/${businessId}`);
+        if (!res.ok) throw new Error('Business not found');
+        business = await res.json();
+        document.title = `${business.business_name} — AgentFoundry`;
+        renderStorefront();
+      } catch (err) {
+        document.getElementById('storefront').innerHTML =
+          `<div class="loading-center"><p style="color:#f87171">Failed to load store: ${err.message}</p></div>`;
+      }
+    }
+
+    function renderStorefront() {
+      document.getElementById('storefront').innerHTML = `
+        <div class="store-hero">
+          <div class="store-badge">🤖 AI-Powered Service</div>
+          <h1 class="store-name">${esc(business.business_name)}</h1>
+          <p class="store-tagline">${esc(business.tagline)}</p>
+          <div class="price-tag">
+            <span class="price-amount">${business.pricing_usdc} USDC</span>
+            <span class="price-label">per resume</span>
+          </div>
+        </div>
+
+        <div class="order-card">
+          <h2>Submit Your Resume</h2>
+          <p class="order-desc">
+            Paste your current resume below. Our AI agent will rewrite it for
+            maximum clarity, impact, and ATS compatibility.
+          </p>
+
+          <div class="input-group">
+            <label>Your Current Resume</label>
+            <textarea
+              id="resumeInput"
+              rows="14"
+              placeholder="Paste your resume here...
+
+John Doe
+Software Engineer | john@example.com | (555) 123-4567
+
+EXPERIENCE
+Software Engineer — TechCorp (2020–2024)
+- Built web applications using React
+- Worked with cross-functional teams
+- Helped with deployment
+
+EDUCATION
+BS Computer Science, State University, 2020
+
+SKILLS
+JavaScript, Python, SQL"
+            ></textarea>
+          </div>
+
+          <div class="checkout-section" id="checkoutSection">
+            <div class="checkout-info">
+              <div class="checkout-row">
+                <span>Service</span>
+                <span>AI Resume Optimization</span>
+              </div>
+              <div class="checkout-row">
+                <span>Delivery</span>
+                <span>~30 seconds</span>
+              </div>
+              <div class="checkout-row total">
+                <span>Total</span>
+                <span>${business.pricing_usdc} USDC</span>
+              </div>
+            </div>
+            <button class="btn-primary btn-pay" onclick="submitOrder()">
+              Pay ${business.pricing_usdc} USDC &amp; Submit →
+            </button>
+          </div>
+
+          <div class="loading-state hidden" id="payLoading">
+            <div class="spinner"></div>
+            <div class="agent-log" id="payLog">
+              <div class="log-entry">💳 Processing payment...</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function submitOrder() {
+      const resumeText = document.getElementById('resumeInput').value.trim();
+      if (!resumeText) {
+        alert('Please paste your resume first.');
+        return;
+      }
+
+      document.getElementById('checkoutSection').classList.add('hidden');
+      document.getElementById('payLoading').classList.remove('hidden');
+
+      const PAY_MESSAGES = [
+        '💳 Processing payment...',
+        '✅ Payment confirmed!',
+        '🤖 Dispatching AI fulfillment agent...',
+        '📊 Analyzing resume structure...',
+        '✍️  Rewriting for impact and clarity...',
+      ];
+
+      const log = document.getElementById('payLog');
+      let msgIdx = 0;
+      const interval = setInterval(() => {
+        if (msgIdx < PAY_MESSAGES.length - 1) {
+          msgIdx++;
+          const entry = document.createElement('div');
+          entry.className = 'log-entry';
+          entry.textContent = PAY_MESSAGES[msgIdx];
+          log.appendChild(entry);
+          log.scrollTop = log.scrollHeight;
+        }
+      }, 1100);
+
+      try {
+        // 1. Create order
+        const orderRes = await fetch('/api/orders/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            business_id: businessId,
+            input_data: { resume_text: resumeText },
+          }),
+        });
+        const order = await orderRes.json();
+
+        // 2. Mock checkout session
+        await fetch('/checkout/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_id: order.order_id, amount_usdc: business.pricing_usdc }),
+        });
+
+        // 3. Trigger payment webhook — fires fulfillment agent in background
+        await fetch('/webhook/payment-success', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            order_id: order.order_id,
+            payment_id: `mock_pay_${Date.now()}`,
+          }),
+        });
+
+        clearInterval(interval);
+        await new Promise(r => setTimeout(r, 1200));
+        window.location.href = `/order/${order.order_id}`;
+      } catch (err) {
+        clearInterval(interval);
+        document.getElementById('payLoading').classList.add('hidden');
+        document.getElementById('checkoutSection').classList.remove('hidden');
+        alert('Something went wrong: ' + err.message);
+      }
+    }
+
+    function esc(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    loadBusiness();
+  </script>
+</body>
+</html>

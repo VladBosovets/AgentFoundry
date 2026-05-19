@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgentFoundry — Launch an AI Business</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="page-wrapper">
+    <header class="site-header">
+      <div class="logo">⬡ AgentFoundry</div>
+      <div class="badge">Agent Economy</div>
+    </header>
+
+    <main>
+      <div class="label">AI-Powered Business Generator</div>
+      <h1>Launch an AI business<br>in <span class="highlight">one step</span></h1>
+      <p class="subtitle">
+        Describe your idea. An AI agent will generate the storefront, accept orders,
+        process payments, and fulfill them — fully autonomously.
+      </p>
+
+      <div class="create-form" id="createForm">
+        <div class="input-group">
+          <label>Your business idea</label>
+          <input
+            type="text"
+            id="ideaInput"
+            value="Resume optimization business"
+            placeholder="e.g. Resume optimization business"
+            onkeydown="if(event.key==='Enter') createBusiness()"
+          />
+        </div>
+        <button class="btn-primary" onclick="createBusiness()">
+          Generate Business →
+        </button>
+      </div>
+
+      <div class="loading-state hidden" id="loadingState">
+        <div class="spinner"></div>
+        <div class="agent-log" id="agentLog">
+          <div class="log-entry">🤖 Agent is designing your business...</div>
+        </div>
+      </div>
+
+      <div class="flow-diagram">
+        <div class="flow-step">💡 Idea</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">🏪 Store</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">📝 Order</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">💳 Payment</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">🤖 Agent</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">✅ Output</div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const AGENT_MESSAGES = [
+      '🤖 Agent is designing your business...',
+      '📋 Generating service structure...',
+      '💰 Setting pricing model (5 USDC)...',
+      '🎨 Creating storefront...',
+      '✅ Business is live!',
+    ];
+
+    async function createBusiness() {
+      const idea = document.getElementById('ideaInput').value.trim();
+      if (!idea) return;
+
+      document.getElementById('createForm').classList.add('hidden');
+      const loadingState = document.getElementById('loadingState');
+      loadingState.classList.remove('hidden');
+
+      const log = document.getElementById('agentLog');
+      let msgIdx = 0;
+      const interval = setInterval(() => {
+        if (msgIdx < AGENT_MESSAGES.length - 1) {
+          msgIdx++;
+          const entry = document.createElement('div');
+          entry.className = 'log-entry';
+          entry.textContent = AGENT_MESSAGES[msgIdx];
+          log.appendChild(entry);
+          log.scrollTop = log.scrollHeight;
+        }
+      }, 900);
+
+      try {
+        const res = await fetch('/api/business/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idea }),
+        });
+
+        const data = await res.json();
+        clearInterval(interval);
+
+        if (data.business_id) {
+          await new Promise(r => setTimeout(r, 600));
+          window.location.href = `/business/${data.business_id}`;
+        } else {
+          throw new Error(data.message || 'Unknown error');
+        }
+      } catch (err) {
+        clearInterval(interval);
+        loadingState.classList.add('hidden');
+        document.getElementById('createForm').classList.remove('hidden');
+        alert('Failed to create business: ' + err.message);
+      }
+    }
+  </script>
+</body>
+</html>

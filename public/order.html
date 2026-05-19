@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order — AgentFoundry</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="page-wrapper">
+    <header class="site-header">
+      <a href="/" class="logo">⬡ AgentFoundry</a>
+      <div class="badge">Order Status</div>
+    </header>
+
+    <main class="order-page">
+      <div id="orderContent">
+        <div class="loading-center">
+          <div class="spinner"></div>
+          <p>Loading order...</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const orderId = window.location.pathname.split('/').pop();
+    let pollTimer = null;
+
+    const WORKING_MESSAGES = [
+      '🤖 Analyzing resume structure...',
+      '📊 Identifying key achievements...',
+      '✍️  Rewriting with stronger action verbs...',
+      '🎯 Optimizing for ATS keyword matching...',
+      '🔍 Finalizing and polishing...',
+      '⚡ Almost done...',
+    ];
+    let msgIdx = 0;
+    let msgTimer = null;
+
+    async function loadOrder() {
+      try {
+        const res = await fetch(`/api/order/${orderId}`);
+        const order = await res.json();
+        renderOrder(order);
+
+        if (order.result) {
+          stopPolling();
+        }
+      } catch (err) {
+        console.error('Poll error:', err);
+      }
+    }
+
+    function startPolling() {
+      pollTimer = setInterval(loadOrder, 3000);
+
+      // Rotate working messages
+      msgTimer = setInterval(() => {
+        const el = document.getElementById('workingMsg');
+        if (el) {
+          msgIdx = (msgIdx + 1) % WORKING_MESSAGES.length;
+          el.style.opacity = '0';
+          setTimeout(() => {
+            if (el) {
+              el.textContent = WORKING_MESSAGES[msgIdx];
+              el.style.opacity = '1';
+            }
+          }, 350);
+        }
+      }, 4000);
+    }
+
+    function stopPolling() {
+      clearInterval(pollTimer);
+      clearInterval(msgTimer);
+    }
+
+    function renderOrder(order) {
+      const content = document.getElementById('orderContent');
+
+      if (!order.result) {
+        const paymentPill = order.payment_status === 'paid'
+          ? '<span class="status-pill pill-paid">💳 Payment Confirmed</span>'
+          : '<span class="status-pill pill-pending">⏳ Processing Payment</span>';
+
+        content.innerHTML = `
+          <div class="order-status-card processing">
+            <span class="status-icon pulsing">🤖</span>
+            <h2>AI Agent is Working...</h2>
+            <p>Your resume is being optimized. This usually takes 15–30 seconds.</p>
+            <div class="progress-bar"><div class="progress-fill"></div></div>
+            <div class="working-msg" id="workingMsg">${WORKING_MESSAGES[0]}</div>
+            <div class="order-meta">
+              ${paymentPill}
+              <span class="order-id-badge">Order #${orderId.slice(0, 8).toUpperCase()}</span>
+            </div>
+          </div>
+        `;
+
+        // Start message rotation if not already
+        if (!msgTimer) startPolling();
+
+      } else if (order.result.error) {
+        content.innerHTML = `
+          <div class="order-status-card">
+            <span class="status-icon">⚠️</span>
+            <h2>Fulfillment Error</h2>
+            <div class="error-box">
+              <strong>The AI agent encountered an error:</strong><br>${esc(order.result.message)}
+            </div>
+            <div class="action-row" style="margin-top:24px">
+              <a href="/" class="btn-secondary">← Try Again</a>
+            </div>
+          </div>
+        `;
+      } else {
+        content.innerHTML = `
+          <div class="order-status-card complete">
+            <div class="completion-header">
+              <span class="status-icon">✅</span>
+              <div>
+                <h2>Resume Optimized!</h2>
+                <div class="order-meta">
+                  <span class="status-pill pill-paid">💳 Payment Confirmed</span>
+                  <span class="status-pill pill-fulfilled">🤖 AI Fulfilled</span>
+                  <span class="order-id-badge">Order #${orderId.slice(0, 8).toUpperCase()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="result-box">
+              <div class="result-box-header">
+                <h3>Optimized Resume</h3>
+                <button class="btn-copy" onclick="copyResult()">Copy</button>
+              </div>
+              <div class="result-content" id="resultContent"></div>
+            </div>
+
+            <div class="action-row">
+              <a href="/" class="btn-secondary">← Launch Another Business</a>
+            </div>
+          </div>
+        `;
+
+        // Set text content safely (avoids XSS, preserves formatting via pre-wrap CSS)
+        document.getElementById('resultContent').textContent = order.result.optimized_resume;
+      }
+    }
+
+    function copyResult() {
+      const text = document.getElementById('resultContent').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.querySelector('.btn-copy');
+        const original = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = original; }, 2000);
+      });
+    }
+
+    function esc(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    // Initial load + start polling
+    loadOrder();
+    startPolling();
+  </script>
+</body>
+</html>
