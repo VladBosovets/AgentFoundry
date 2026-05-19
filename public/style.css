@@ -605,3 +605,118 @@ textarea {
 }
 
 .hidden { display: none !important; }
+
+/* ── Business Intelligence Panel ── */
+.perf-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 40px;
+}
+
+.perf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.perf-title {
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.perf-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.perf-live::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--green);
+  border-radius: 50%;
+  animation: blink 2s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.perf-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 1px solid var(--border);
+}
+
+.perf-metric {
+  padding: 16px 20px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.perf-metric:last-child { border-right: none; }
+
+.perf-val {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: white;
+  transition: color 0.4s;
+}
+
+.perf-val.changed { color: var(--primary); }
+
+.perf-label {
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 600;
+}
+
+.perf-events {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.perf-event {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 9px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  animation: fadeUp 0.35s ease;
+}
+
+.perf-event:last-child { border-bottom: none; }
+
+.perf-event-time {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-family: monospace;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.perf-event-msg { color: var(--muted-2); flex: 1; }
+
+.perf-empty {
+  padding: 18px 20px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+}

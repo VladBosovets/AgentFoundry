@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const { generateBusiness, fulfillOrder } = require('./src/agents');
 const { isLiveMode, createPayment, parseWebhook } = require('./src/locus');
+const { runAdaptation, getPerformance } = require('./src/lifecycle');
 const db = require('./src/db');
 
 const app = express();
@@ -73,6 +74,15 @@ app.get('/api/order/:id', (req, res) => {
   res.json(order);
 });
 
+app.get('/api/business/:id/performance', (req, res) => {
+  const business = db.businesses.get(req.params.id);
+  if (!business) return res.status(404).json({ error: 'Business not found' });
+  const perf = getPerformance(req.params.id);
+  // Always reflect the live price
+  perf.current_pricing_usdc = business.pricing_usdc;
+  res.json(perf);
+});
+
 // ── Checkout ──────────────────────────────────────────────────────────────────
 // In live mode: creates a real Locus payment and returns the hosted paymentUrl.
 // In mock mode: returns paymentUrl: null so the frontend fires the mock webhook.
@@ -117,19 +127,32 @@ function triggerFulfillment(order_id) {
   if (!order) return;
 
   const business = db.businesses.get(order.business_id);
+  const startTime = Date.now();
   console.log(`Fulfilling order ${order_id}...`);
 
   fulfillOrder(business, order)
     .then((result) => {
+      const elapsed = (Date.now() - startTime) / 1000;
       order.result = result;
       order.fulfilled_at = new Date().toISOString();
+      order.fulfillment_time_seconds = elapsed;
+      order.success_flag = true;
       db.orders.set(order_id, order);
-      console.log(`Order ${order_id} fulfilled`);
+      console.log(`Order ${order_id} fulfilled in ${elapsed.toFixed(1)}s`);
+      runAdaptation(order.business_id).catch(err =>
+        console.error('[Lifecycle]', err.message)
+      );
     })
     .catch((err) => {
+      const elapsed = (Date.now() - startTime) / 1000;
       console.error(`Fulfillment failed for ${order_id}:`, err.message);
       order.result = { error: true, message: err.message };
+      order.fulfillment_time_seconds = elapsed;
+      order.success_flag = false;
       db.orders.set(order_id, order);
+      runAdaptation(order.business_id).catch(e =>
+        console.error('[Lifecycle]', e.message)
+      );
     });
 }
 

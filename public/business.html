@@ -13,10 +13,41 @@
       <div class="badge">Live Store</div>
     </header>
 
-    <main id="storefront">
-      <div class="loading-center">
-        <div class="spinner"></div>
-        <p>Loading storefront...</p>
+    <main>
+      <div id="storefront">
+        <div class="loading-center">
+          <div class="spinner"></div>
+          <p>Loading storefront...</p>
+        </div>
+      </div>
+
+      <!-- Business Intelligence panel — shown after first order -->
+      <div class="perf-panel hidden" id="perfPanel">
+        <div class="perf-header">
+          <span class="perf-title">🧠 Business Intelligence</span>
+          <span class="perf-live">Live</span>
+        </div>
+        <div class="perf-metrics">
+          <div class="perf-metric">
+            <span class="perf-val" id="pm-orders">0</span>
+            <span class="perf-label">Orders</span>
+          </div>
+          <div class="perf-metric">
+            <span class="perf-val" id="pm-success">—</span>
+            <span class="perf-label">Success Rate</span>
+          </div>
+          <div class="perf-metric">
+            <span class="perf-val" id="pm-price">—</span>
+            <span class="perf-label">Current Price</span>
+          </div>
+          <div class="perf-metric">
+            <span class="perf-val" id="pm-prompt">v1</span>
+            <span class="perf-label">Prompt Ver.</span>
+          </div>
+        </div>
+        <div class="perf-events" id="perfEvents">
+          <div class="perf-empty">No lifecycle events yet. Place an order to start the loop.</div>
+        </div>
       </div>
     </main>
   </div>
@@ -24,6 +55,10 @@
   <script>
     const businessId = window.location.pathname.split('/').pop();
     let business = null;
+    let perfPollTimer = null;
+    let prevPerf = {};
+
+    // ── Load business ──────────────────────────────────────────────────────────
 
     async function loadBusiness() {
       try {
@@ -32,6 +67,8 @@
         business = await res.json();
         document.title = `${business.business_name} — AgentFoundry`;
         renderStorefront();
+        loadPerformance();
+        perfPollTimer = setInterval(loadPerformance, 4000);
       } catch (err) {
         document.getElementById('storefront').innerHTML =
           `<div class="loading-center"><p style="color:#f87171">Failed to load store: ${err.message}</p></div>`;
@@ -45,7 +82,7 @@
           <h1 class="store-name">${esc(business.business_name)}</h1>
           <p class="store-tagline">${esc(business.tagline)}</p>
           <div class="price-tag">
-            <span class="price-amount">${business.pricing_usdc} USDC</span>
+            <span class="price-amount" id="livePrice">${business.pricing_usdc} USDC</span>
             <span class="price-label">per resume</span>
           </div>
         </div>
@@ -93,10 +130,10 @@ JavaScript, Python, SQL"
               </div>
               <div class="checkout-row total">
                 <span>Total</span>
-                <span>${business.pricing_usdc} USDC</span>
+                <span id="checkoutPrice">${business.pricing_usdc} USDC</span>
               </div>
             </div>
-            <button class="btn-primary btn-pay" onclick="submitOrder()">
+            <button class="btn-primary btn-pay" onclick="submitOrder()" id="payBtn">
               Pay ${business.pricing_usdc} USDC &amp; Submit →
             </button>
           </div>
@@ -110,6 +147,78 @@ JavaScript, Python, SQL"
         </div>
       `;
     }
+
+    // ── Performance panel ──────────────────────────────────────────────────────
+
+    async function loadPerformance() {
+      try {
+        const res = await fetch(`/api/business/${businessId}/performance`);
+        const perf = await res.json();
+        renderPerformance(perf);
+      } catch {}
+    }
+
+    function renderPerformance(perf) {
+      const panel = document.getElementById('perfPanel');
+
+      if (perf.total_orders === 0) return;
+      panel.classList.remove('hidden');
+
+      const successRate = perf.total_orders > 0
+        ? ((perf.successful_orders / perf.total_orders) * 100).toFixed(0) + '%'
+        : '—';
+
+      setMetric('pm-orders', perf.total_orders, prevPerf.total_orders);
+      setMetric('pm-success', successRate, prevPerf.success_rate);
+      setMetric('pm-price', `$${perf.current_pricing_usdc}`, prevPerf.price);
+      setMetric('pm-prompt', `v${perf.prompt_version}`, prevPerf.prompt_version);
+
+      // Sync the live price on the storefront
+      const priceEls = ['livePrice', 'checkoutPrice'];
+      priceEls.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = `${perf.current_pricing_usdc} USDC`;
+      });
+      const payBtn = document.getElementById('payBtn');
+      if (payBtn) payBtn.innerHTML = `Pay ${perf.current_pricing_usdc} USDC &amp; Submit →`;
+      business.pricing_usdc = perf.current_pricing_usdc;
+
+      // Events log
+      const eventsEl = document.getElementById('perfEvents');
+      if (perf.events && perf.events.length > 0) {
+        eventsEl.innerHTML = perf.events.map(e => `
+          <div class="perf-event">
+            <span class="perf-event-time">${formatTime(e.timestamp)}</span>
+            <span class="perf-event-msg">${esc(e.message)}</span>
+          </div>
+        `).join('');
+      }
+
+      prevPerf = {
+        total_orders: perf.total_orders,
+        success_rate: successRate,
+        price: `$${perf.current_pricing_usdc}`,
+        prompt_version: perf.prompt_version,
+      };
+    }
+
+    function setMetric(id, value, prev) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const changed = prev !== undefined && String(value) !== String(prev);
+      el.textContent = value;
+      if (changed) {
+        el.classList.add('changed');
+        setTimeout(() => el.classList.remove('changed'), 2000);
+      }
+    }
+
+    function formatTime(iso) {
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    // ── Submit order ───────────────────────────────────────────────────────────
 
     async function submitOrder() {
       const resumeText = document.getElementById('resumeInput').value.trim();
@@ -165,11 +274,10 @@ JavaScript, Python, SQL"
         clearInterval(interval);
 
         if (checkout.payment_url) {
-          // Live mode: redirect to Locus hosted payment page.
-          // Locus will redirect back to /order/:id on success.
+          // Live mode: redirect to Locus hosted payment page
           window.location.href = checkout.payment_url;
         } else {
-          // Mock mode: fire the internal webhook to simulate payment, then redirect.
+          // Mock mode: fire the internal webhook to simulate payment, then redirect
           await fetch('/webhook/payment-success', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
