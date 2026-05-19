@@ -154,26 +154,33 @@ JavaScript, Python, SQL"
         });
         const order = await orderRes.json();
 
-        // 2. Mock checkout session
-        await fetch('/checkout/create', {
+        // 2. Create checkout — returns paymentUrl if live, null if mock
+        const checkoutRes = await fetch('/checkout/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ order_id: order.order_id, amount_usdc: business.pricing_usdc }),
         });
-
-        // 3. Trigger payment webhook — fires fulfillment agent in background
-        await fetch('/webhook/payment-success', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            order_id: order.order_id,
-            payment_id: `mock_pay_${Date.now()}`,
-          }),
-        });
+        const checkout = await checkoutRes.json();
 
         clearInterval(interval);
-        await new Promise(r => setTimeout(r, 1200));
-        window.location.href = `/order/${order.order_id}`;
+
+        if (checkout.payment_url) {
+          // Live mode: redirect to Locus hosted payment page.
+          // Locus will redirect back to /order/:id on success.
+          window.location.href = checkout.payment_url;
+        } else {
+          // Mock mode: fire the internal webhook to simulate payment, then redirect.
+          await fetch('/webhook/payment-success', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              order_id: order.order_id,
+              payment_id: `mock_pay_${Date.now()}`,
+            }),
+          });
+          await new Promise(r => setTimeout(r, 1200));
+          window.location.href = `/order/${order.order_id}`;
+        }
       } catch (err) {
         clearInterval(interval);
         document.getElementById('payLoading').classList.add('hidden');
