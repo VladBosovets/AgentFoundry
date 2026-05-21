@@ -1,6 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk');
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new Anthropic();
 
 async function generateBusiness(idea) {
   const response = await client.messages.create({

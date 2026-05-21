@@ -4,7 +4,7 @@ const store = require('./store');
 const EVAL_INTERVAL = 1;
 const PROMPT_EVAL_INTERVAL = 2;
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new Anthropic();
 
 // ── Performance helpers ───────────────────────────────────────────────────────
 
