@@ -34,6 +34,13 @@ function createInMemoryStore() {
       const p = performance.get(businessId);
       return { ...p, events: [...p.events] };
     },
+
+    // Test helper — clears all data between tests
+    _reset() {
+      businesses.clear();
+      orders.clear();
+      performance.clear();
+    },
   };
 }
 
