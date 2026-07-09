@@ -14,18 +14,21 @@ jest.mock('../src/lifecycle', () => ({
 }));
 
 jest.mock('../src/locus', () => ({
-  isLiveMode: () => false,
+  isLiveMode: jest.fn(() => false),
   createPayment: jest.fn().mockResolvedValue({
     mock: true,
     paymentId: 'mock_pay_xyz',
     paymentUrl: null,
   }),
   parseWebhook: jest.requireActual('../src/locus').parseWebhook,
+  verifyWebhookSignature: jest.requireActual('../src/locus').verifyWebhookSignature,
 }));
 
+const crypto = require('crypto');
 const request = require('supertest');
 const { app } = require('../server');
 const store = require('../src/store');
+const locus = require('../src/locus');
 
 beforeEach(() => store._reset());
 
@@ -269,6 +272,92 @@ describe('POST /webhook/payment-success', () => {
       .send({ order_id: 'no_such_order' });
 
     expect(res.status).toBe(404);
+  });
+
+  test('is disabled once live payments are configured', async () => {
+    locus.isLiveMode.mockReturnValueOnce(true);
+
+    const res = await request(app)
+      .post('/webhook/payment-success')
+      .send({ order_id: 'ord_wh_1' });
+
+    expect(res.status).toBe(404);
+
+    const order = await store.getOrder('ord_wh_1');
+    expect(order.payment_status).toBe('pending');
+  });
+});
+
+// ── POST /webhooks/locus (real payment webhook) ───────────────────────────────
+
+describe('POST /webhooks/locus', () => {
+  const SECRET = 'test_webhook_secret';
+  const ORDER = {
+    order_id: 'ord_locus_1',
+    business_id: 'biz_locus_test',
+    input_data: { resume_text: 'test resume' },
+    payment_status: 'pending',
+    result: null,
+    success_flag: undefined,
+    fulfillment_time_seconds: null,
+    created_at: new Date().toISOString(),
+  };
+
+  const payload = {
+    eventType: 'payment.completed.v0',
+    data: { reference: 'ord_locus_1', paymentId: 'pay_real_123' },
+  };
+  const rawBody = JSON.stringify(payload);
+
+  function sign(body, secret) {
+    return crypto.createHmac('sha256', secret).update(body).digest('hex');
+  }
+
+  let originalSecret;
+  beforeEach(async () => {
+    originalSecret = process.env.LOCUS_WEBHOOK_SECRET;
+    process.env.LOCUS_WEBHOOK_SECRET = SECRET;
+    await store.saveOrder(ORDER);
+  });
+  afterEach(() => {
+    process.env.LOCUS_WEBHOOK_SECRET = originalSecret;
+  });
+
+  test('rejects a request with no signature', async () => {
+    const res = await request(app)
+      .post('/webhooks/locus')
+      .set('Content-Type', 'application/json')
+      .send(rawBody);
+
+    expect(res.status).toBe(401);
+
+    const order = await store.getOrder('ord_locus_1');
+    expect(order.payment_status).toBe('pending');
+  });
+
+  test('rejects a request with an invalid signature', async () => {
+    const res = await request(app)
+      .post('/webhooks/locus')
+      .set('Content-Type', 'application/json')
+      .set('x-locus-signature', 'not_the_real_signature')
+      .send(rawBody);
+
+    expect(res.status).toBe(401);
+  });
+
+  test('accepts a request with a valid signature and marks the order paid', async () => {
+    const res = await request(app)
+      .post('/webhooks/locus')
+      .set('Content-Type', 'application/json')
+      .set('x-locus-signature', sign(rawBody, SECRET))
+      .send(rawBody);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const order = await store.getOrder('ord_locus_1');
+    expect(order.payment_status).toBe('paid');
+    expect(order.payment_id).toBe('pay_real_123');
   });
 });
 

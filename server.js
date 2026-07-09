@@ -3,7 +3,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const { generateBusiness, fulfillOrder } = require('./src/agents');
-const { isLiveMode, createPayment, parseWebhook } = require('./src/locus');
+const { isLiveMode, createPayment, parseWebhook, verifyWebhookSignature } = require('./src/locus');
 const { runAdaptation } = require('./src/lifecycle');
 const store = require('./src/store');
 const { migrate } = require('./src/migrate');
@@ -169,6 +169,11 @@ async function triggerFulfillment(order_id) {
 // ── Locus webhook (real payment.completed.v0) ─────────────────────────────────
 
 app.post('/webhooks/locus', async (req, res) => {
+  const signature = req.get('x-locus-signature');
+  if (!verifyWebhookSignature(req.body, signature)) {
+    return res.status(401).json({ error: 'Invalid webhook signature' });
+  }
+
   let body;
   try {
     body = JSON.parse(req.body.toString());
@@ -198,6 +203,8 @@ app.post('/webhooks/locus', async (req, res) => {
 // ── Mock webhook (demo mode) ──────────────────────────────────────────────────
 
 app.post('/webhook/payment-success', async (req, res) => {
+  if (isLiveMode()) return res.status(404).json({ error: 'Not found' });
+
   const { order_id, payment_id } = req.body;
   if (!order_id) return res.status(400).json({ error: 'order_id is required' });
 

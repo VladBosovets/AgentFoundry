@@ -46,12 +46,14 @@ Open [http://localhost:3000](http://localhost:3000)
 | `GET` | `/api/business/:id` | Get business definition |
 | `POST` | `/api/orders/create` | Create an order |
 | `POST` | `/checkout/create` | Mock checkout session |
-| `POST` | `/webhook/payment-success` | Payment webhook → triggers fulfillment |
+| `POST` | `/webhook/payment-success` | Mock payment webhook → triggers fulfillment (demo mode only) |
+| `POST` | `/webhooks/locus` | Real Locus payment webhook → triggers fulfillment (requires `LOCUS_WEBHOOK_SECRET`) |
 | `GET` | `/api/order/:id` | Get order + result |
 
 ## Architecture Notes
 
-- `/webhook/payment-success` responds immediately and runs fulfillment async — compatible with real webhook delivery from CheckoutWithLocus
+- `/webhook/payment-success` responds immediately and runs fulfillment async — compatible with real webhook delivery from CheckoutWithLocus. It only works in demo mode (no `LOCUS_API_KEY`) — once live payments are configured it returns 404 so payment can't be bypassed.
+- `/webhooks/locus` verifies an HMAC-SHA256 signature (`x-locus-signature` header) against `LOCUS_WEBHOOK_SECRET` before trusting the payload; requests without a valid signature are rejected with 401.
 - Business and order storage uses `Map` — drop-in replaceable with any DB
 - Fulfillment prompt is generated per-business by the agent, not hardcoded
 

@@ -1,3 +1,5 @@
+const crypto = require('crypto');
+
 const LOCUS_API_BASE = 'https://api.paygentic.io';
 
 function isLiveMode() {
@@ -35,6 +37,19 @@ async function createPayment({ orderId, amountUsdc, businessName, baseUrl }) {
   return { mock: false, paymentId: data.id, paymentUrl: data.paymentUrl };
 }
 
+// Verifies the HMAC-SHA256 signature Paygentic sends on the raw webhook body.
+// Fails closed: no secret configured or no/mismatched signature → not verified.
+function verifyWebhookSignature(rawBody, signatureHeader) {
+  const secret = process.env.LOCUS_WEBHOOK_SECRET;
+  if (!secret || !signatureHeader) return false;
+
+  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  const givenBuf = Buffer.from(signatureHeader, 'utf8');
+  if (expectedBuf.length !== givenBuf.length) return false;
+  return crypto.timingSafeEqual(expectedBuf, givenBuf);
+}
+
 // Parses a real payment.completed.v0 webhook from Paygentic.
 // Returns { orderId, paymentId } or throws if the event type is unexpected.
 function parseWebhook(body) {
@@ -47,4 +62,4 @@ function parseWebhook(body) {
   };
 }
 
-module.exports = { isLiveMode, createPayment, parseWebhook };
+module.exports = { isLiveMode, createPayment, parseWebhook, verifyWebhookSignature };
